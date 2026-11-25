@@ -297,7 +297,7 @@ static void softmac_tx(struct ieee80211_hw *hw, struct ieee80211_tx_control *tx_
     ieee80211_tx_status_ni(hw, skb);
 }
 
-static int my_config(struct ieee80211_hw *hw, u32 changed_flags) { return 0; } 
+static int my_config(struct ieee80211_hw *hw, int radio_idx, u32 changed_flags) { return 0; }
 
 static void my_configure_filter(struct ieee80211_hw *hw, unsigned int changed_flags,
                                 unsigned int *total_flags, u64 multicast) {
