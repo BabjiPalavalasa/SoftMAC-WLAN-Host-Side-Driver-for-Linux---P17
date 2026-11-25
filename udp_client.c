@@ -14,7 +14,7 @@ int main() {
     int client_sock;
     struct sockaddr_in server_addr;
     char message[MAX_BUF];
-    char *interface_name = "wlan0";
+    char *interface_name = "wlan1";
 
     client_sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (client_sock < 0) {
