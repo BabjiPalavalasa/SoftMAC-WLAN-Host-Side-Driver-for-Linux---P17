@@ -119,24 +119,19 @@ static void softmac_rx_work(struct work_struct *work)
     }
 }
 
-static void softmac_throughput_work(struct work_struct *work)
+static enum hrtimer_restart softmac_throughput_timer_cb(struct hrtimer *timer)
 {
-    struct softmac_priv *priv = container_of(work, struct softmac_priv,
-                                             throughput_work.work);
+    struct softmac_priv *priv = container_of(timer, struct softmac_priv,
+                                             throughput_timer);
     unsigned long flags;
     unsigned long tx_b, rx_b;
-    ktime_t now;
-    s64 delta_us;
+    unsigned long tx_bps, rx_bps;
 
     spin_lock_irqsave(&priv->lock, flags);
     if (!priv->is_running) {
         spin_unlock_irqrestore(&priv->lock, flags);
-        return;
+        return HRTIMER_NORESTART;
     }
-
-    now = ktime_get();
-    delta_us = ktime_us_delta(now, priv->last_tp_time);
-    priv->last_tp_time = now;
 
     tx_b = priv->tx_bytes;
     rx_b = priv->rx_bytes;
@@ -144,17 +139,18 @@ static void softmac_throughput_work(struct work_struct *work)
     priv->rx_bytes = 0;
     spin_unlock_irqrestore(&priv->lock, flags);
 
-    if ((tx_b > 0 || rx_b > 0) && delta_us > 0) {
-        u64 tx_bps = div64_u64((u64)tx_b * 8ULL * USEC_PER_SEC, (u64)delta_us);
-        u64 rx_bps = div64_u64((u64)rx_b * 8ULL * USEC_PER_SEC, (u64)delta_us);
+    if (tx_b > 0 || rx_b > 0) {
+        tx_bps = tx_b * 8;
+        rx_bps = rx_b * 8;
 
-        pr_info("%s: Throughput | TX: %llu bps (%llu Kbps, %llu Mbps) | RX: %llu bps (%llu Kbps, %llu Mbps)\n",
+        pr_info("%s: Throughput | TX: %lu bps (%lu Kbps, %lu Mbps) | RX: %lu bps (%lu Kbps, %lu Mbps)\n",
                 DRIVER_NAME,
-                tx_bps, div_u64(tx_bps, 1000), div_u64(tx_bps, 1000000),
-                rx_bps, div_u64(rx_bps, 1000), div_u64(rx_bps, 1000000));
+                tx_bps, tx_bps / 1000, tx_bps / 1000000,
+                rx_bps, rx_bps / 1000, rx_bps / 1000000);
     }
 
-    schedule_delayed_work(&priv->throughput_work, HZ);
+    hrtimer_forward_now(timer, ktime_set(1, 0));
+    return HRTIMER_RESTART;
 }
 
 static int softmac_start(struct ieee80211_hw *hw)
@@ -166,10 +162,9 @@ static int softmac_start(struct ieee80211_hw *hw)
     priv->is_running = true;
     priv->tx_bytes = 0;
     priv->rx_bytes = 0;
-    priv->last_tp_time = ktime_get();
     spin_unlock_irqrestore(&priv->lock, flags);
 
-    schedule_delayed_work(&priv->throughput_work, HZ);
+    hrtimer_start(&priv->throughput_timer, ktime_set(1, 0), HRTIMER_MODE_REL);
 
     pr_info("%s: Interface started successfully (Carrier UP)\n", DRIVER_NAME);
     return 0;
@@ -186,7 +181,8 @@ static void softmac_stop(struct ieee80211_hw *hw, bool reassoc)
     spin_unlock_irqrestore(&priv->lock, flags);
 
     cancel_delayed_work_sync(&priv->peer_keepalive_work);
-    cancel_delayed_work_sync(&priv->throughput_work);
+    hrtimer_cancel(&priv->throughput_timer);
+    cancel_work_sync(&priv->rx_work);
     skb_queue_purge(&priv->rx_queue);
 
     pr_info("%s: Interface stopped\n", DRIVER_NAME);
@@ -428,7 +424,8 @@ static int __init softmac_init(void)
      
      priv->tx_bytes = 0;
      priv->rx_bytes = 0;
-     INIT_DELAYED_WORK(&priv->throughput_work, softmac_throughput_work);
+     hrtimer_setup(&priv->throughput_timer, softmac_throughput_timer_cb,
+              CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 
     SET_IEEE80211_DEV(hw, &g_pdev->dev); 
 
@@ -480,7 +477,7 @@ static void __exit softmac_exit(void)
         ieee80211_unregister_hw(g_softmac_hw);
 
         cancel_delayed_work_sync(&priv->peer_keepalive_work);
-        cancel_delayed_work_sync(&priv->throughput_work);
+        hrtimer_cancel(&priv->throughput_timer);
         cancel_work_sync(&priv->rx_work);
         skb_queue_purge(&priv->rx_queue);
 

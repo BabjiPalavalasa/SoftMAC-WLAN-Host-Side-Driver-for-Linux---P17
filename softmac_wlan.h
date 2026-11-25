@@ -11,8 +11,7 @@
 #include <linux/platform_device.h>
 #include <net/mac80211.h>
 #include <net/cfg80211.h>
-#include <linux/ktime.h>
-#include <linux/math64.h>
+#include <linux/hrtimer.h>
 #include <linux/ip.h>
 #include <linux/udp.h>
 #include <linux/etherdevice.h>
@@ -20,7 +19,6 @@
 
 struct softmac_priv {
     struct ieee80211_hw *hw;
-    struct net_device *netdev;
     struct ieee80211_vif *vif;
     
     bool is_running;
@@ -36,10 +34,10 @@ struct softmac_priv {
     bool ibss_active;
     u16 keepalive_seq;
 
-    struct delayed_work throughput_work;
     unsigned long tx_bytes;
     unsigned long rx_bytes;
 
-    ktime_t last_tp_time;
+    struct hrtimer throughput_timer;
+
 };
 #endif
