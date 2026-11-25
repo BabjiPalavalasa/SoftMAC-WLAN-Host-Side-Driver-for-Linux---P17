@@ -16,9 +16,8 @@ int main() {
     int client_sock;
     struct sockaddr_in server_addr;
     char message[MAX_BUF];
-    char *interface_name = "wlan0";
+    char *interface_name = "wlan1";
     unsigned long packets_sent = 0;
-    time_t end_time;
 
     client_sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (client_sock < 0) {
@@ -50,7 +49,9 @@ int main() {
     clock_gettime(CLOCK_MONOTONIC, &now);
     if (now.tv_sec > end.tv_sec ||
         (now.tv_sec == end.tv_sec && now.tv_nsec >= end.tv_nsec))
-        break;
+        {
+           break;
+        }
         
         int n = sendto(client_sock, message, sizeof(message), 0,
                        (const struct sockaddr *)&server_addr, sizeof(server_addr));
