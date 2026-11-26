@@ -4,6 +4,10 @@ MODULE_AUTHOR("P. Babji");
 MODULE_DESCRIPTION("SoftMAC Linux WLAN Host-Side Loopback Driver");
 MODULE_LICENSE("GPL");
 
+static bool pkt_log = false;
+module_param(pkt_log, bool, 0644);
+MODULE_PARM_DESC(pkt_log, "Enable per-packet TX/RX logging (impacts throughput)");
+
 static struct platform_device *g_pdev = NULL;
 static struct ieee80211_hw *g_softmac_hw = NULL;
 
@@ -98,14 +102,11 @@ static void softmac_rx_work(struct work_struct *work)
 
                         udph->check = 0;
 
-                        if (payload_len > 0 && payload_len <= max_avail) {
-                            int print_len = payload_len;
-                            if (print_len > 64)
-                                print_len = 64;
-
-                           /* pr_info("%s: [RX] Count=%lu | Len=%d | Payload='%.*s'\n",
-                                    DRIVER_NAME, priv->rx_packet_count,
-                                    payload_len, print_len, payload); */
+                        if (pkt_log && payload_len > 0 && payload_len <= max_avail) 
+                        {
+                                int print_len = payload_len > 64 ? 64 : payload_len;
+                                pr_info("%s: [RX] Count=%lu | Len=%d | Payload='%.*s'\n",
+                                    DRIVER_NAME, priv->rx_packet_count,payload_len, print_len, payload);
                         }
                     }
                 }
@@ -263,15 +264,11 @@ static void softmac_tx(struct ieee80211_hw *hw, struct ieee80211_tx_control *tx_
                                 unsigned char *payload = (unsigned char *)udph + sizeof(struct udphdr);
                                 int max_avail = (int)(rx_skb->len - (payload - rx_skb->data));
 
-                                if (payload_len > 0 && payload_len <= max_avail) 
+                         if (pkt_log && payload_len > 0 && payload_len <= max_avail) 
                                 {
-                                    int print_len = payload_len;
-                                    if (print_len > 64)
-                                        print_len = 64;
-
-                                    /* pr_info("%s: [TX] Count=%lu | Len=%d | Payload='%.*s'\n",
-                                            DRIVER_NAME, priv->tx_packet_count,
-                                            payload_len, print_len, payload); */
+                                  int print_len = payload_len > 64 ? 64 : payload_len;
+                                    pr_info("%s: [TX] Count=%lu | Len=%d | Payload='%.*s'\n",
+                                   DRIVER_NAME, priv->tx_packet_count,payload_len, print_len, payload);
                                 }
                             }
                         }
